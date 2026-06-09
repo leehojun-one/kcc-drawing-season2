@@ -73,7 +73,7 @@ def init_gsheet():
         return None
 
 def log_usage(partner_name, site_address, doc_count):
-    """도면을 구울 때마다 누가 얼마나 썼는지 구글 시트에 몰래(?) 기록합니다."""
+    """도면을 구울 때마다 누가 얼마나 썼인지 구글 시트에 몰래(?) 기록합니다."""
     try:
         sheet = init_gsheet()
         if sheet:
@@ -339,12 +339,12 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     is_right_vent = "우" in vent_dir
     
     splits = []
-    is_ub = "(U/B)" in t_upper or "언발란스" in t_upper
+    is_ub = "(U/B)" in t_upper or "언발란스" in t_upper or (w1 > 0) # 💡 [해결] w1 값이 있으면 무조건 언발란스 연산 가동!
     is_turning = "우핸들좌힌지" in (t_upper + str(vent_dir) + str(product).replace(" ", "")) or "좌핸들우힌지" in (t_upper + str(vent_dir) + str(product).replace(" ", ""))
 
     if '통바ㅁ' not in t_upper and '통바ㄷ' not in t_upper and not is_turning:
         if "2W" in t_upper:
-            if is_ub and w1 > 0:
+            if w1 > 0:  # 💡 [해결] 2W 창 형태 구분 시, 텍스트와 상관없이 w1 수치가 있으면 비율대로 사시 칸 분할!
                 splits = [w1] if is_left_vent else [w - w1]
             else:
                 if "1:2" in t_upper:
@@ -356,7 +356,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                     splits = [w / 2]
                 
         elif "3W" in t_upper:
-            if is_ub and w1 > 0:
+            if w1 > 0:
                 splits = [w1, w - w1] 
             else:
                 splits = [w / 4, w - w / 4] 
@@ -403,21 +403,19 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
             for sp in splits:
                 ax.plot([sp, sp], [0, h], color='black', linewidth=0.8)
                 
-            # 💡 [팀장님 커스텀] #(망) 위치 조절! (간격이 좁을 땐 이 숫자를 조절하세요)
             if "2W" in t_upper:
                 sw = splits[0]
                 _is_left, _is_right = is_left_vent, is_right_vent
                 if not _is_left and not _is_right: _is_right = True 
                 
+                # 💡 [해결] w1 치수 텍스트 색상을 시인성이 뛰어난 'red'(빨간색)로 전면 수정!
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
-                    if is_ub and w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='#1E3A8A')
-                    if has_screen: ax.text(sw/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
-                    if is_ub and w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='#1E3A8A')
-                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
                     
             elif "3W" in t_upper:
                 ax.text((splits[0] + splits[1])/2, h/2, t_upper, ha='center', va='center', color='black', fontsize=10, fontweight='bold', bbox=txt_bbox)
@@ -427,12 +425,10 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 
                 if _is_left:
                     ax.text(splits[0]/2, h/2, "▶", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
-                    if is_ub and w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='#1E3A8A')
-                    if has_screen: ax.text(splits[0]/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
                 if _is_right:
                     ax.text(splits[1] + (w-splits[1])/2, h/2, "◀", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
-                    if is_ub and w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='#1E3A8A')
-                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
 
         if handle_h and not ("핸들" in door_info and "힌지" in door_info):
             ax.plot([0, w], [handle_h, handle_h], color='red', linestyle='--', linewidth=0.8, alpha=0.6)
@@ -473,7 +469,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(w/2, current_y + thick_v/2, full_text, ha='center', va='center', fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
 
-    # 좌측 통바 (🛠️ 에러 해결: full_text 변수 정상 주입)
+    # 좌측 통바
     current_x = 0
     for t in t_left_list:
         thick_v = t['thick'] * t['scale']
@@ -485,7 +481,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
 
-    # 우측 통바 (🛠️ 에러 해결: full_text 변수 정상 주입)
+    # 우측 통바
     current_x = w
     for t in t_right_list:
         thick_v = t['thick'] * t['scale']
