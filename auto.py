@@ -10,6 +10,13 @@ import base64
 import gspread  # 💡 구글 시트 연동용 패키지
 from google.oauth2.service_account import Credentials  # 💡 구글 인증용 패키지
 from datetime import datetime
+import os
+import shutil
+
+# 폰트 캐시 강제 삭제 (이게 핵심입니다!)
+font_cache_dir = os.path.expanduser('~/.cache/matplotlib')
+if os.path.exists(font_cache_dir):
+    shutil.rmtree(font_cache_dir)
 
 # ==========================================
 # 1. 페이지 기본 설정 및 환경 세팅
