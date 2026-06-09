@@ -11,24 +11,37 @@ import gspread  # 💡 구글 시트 연동용 패키지
 from google.oauth2.service_account import Credentials  # 💡 구글 인증용 패키지
 from datetime import datetime
 import os
-import shutil
-
-# 폰트 캐시 강제 삭제 (이게 핵심입니다!)
-font_cache_dir = os.path.expanduser('~/.cache/matplotlib')
-if os.path.exists(font_cache_dir):
-    shutil.rmtree(font_cache_dir)
+import urllib.request
+import matplotlib.font_manager as fm
 
 # ==========================================
 # 1. 페이지 기본 설정 및 환경 세팅
 # ==========================================
 st.set_page_config(page_title="KCC홈씨씨 창호도면 자동화 시스템", layout="wide")
 
+# 💡 [한글 깨짐 최종 해결] 리눅스 서버에서도 한글이 절대 깨지지 않도록 폰트 강제 주입 엔진 작동
 if platform.system() == 'Windows':
     plt.rc('font', family='Malgun Gothic')
 elif platform.system() == 'Darwin':
     plt.rc('font', family='AppleGothic')
 else:
-    plt.rc('font', family='sans-serif')
+    # 스트림릿 클라우드(리눅스) 환경인 경우, 구글 공식 저장소에서 나눔고딕을 직접 다운로드하여 주입합니다.
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "NanumGothic.ttf"
+    
+    if not os.path.exists(font_path):
+        try:
+            urllib.request.urlretrieve(font_url, font_path)
+        except Exception as e:
+            st.error(f"폰트 다운로드 실패: {e}")
+            
+    if os.path.exists(font_path):
+        fm.fontManager.addfont(font_path)
+        font_name = fm.FontProperties(fname=font_path).get_name()
+        plt.rc('font', family=font_name)
+    else:
+        plt.rc('font', family='sans-serif')
+
 plt.rcParams['axes.unicode_minus'] = False 
 
 HOMECC_SLOGAN = "공간에 가치를 더하는 프리미엄 창호, KCC글라스 홈씨씨창호"
@@ -42,7 +55,7 @@ TONGBA_INFO = {
 }
 
 # ==========================================
-# 🔒 [신규] 구글 스프레드시트 보안/로그 연동 엔진
+# 🔒 구글 스프레드시트 보안/로그 연동 엔진
 # ==========================================
 def init_gsheet():
     """Streamlit Secrets에 저장된 구글 서비스 계정 키로 시트에 연결합니다."""
@@ -468,7 +481,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.add_patch(patches.Rectangle((current_x, start_y), thick_v, t_len, facecolor=t['color'], edgecolor='black', linewidth=1.0))
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
-        ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
+        ax.text(current_x + thick_v/2, start_y + t_len/2, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
 
     current_x = w
     for t in t_right_list:
@@ -478,7 +491,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.add_patch(patches.Rectangle((current_x, start_y), thick_v, t_len, facecolor=t['color'], edgecolor='black', linewidth=1.0))
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
-        ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
+        ax.text(current_x + thick_v/2, start_y + t_len/2, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
         current_x += thick_v
 
     display_name = model_name if model_name else product
@@ -631,7 +644,7 @@ if uploaded_file:
             
             st.divider()
             
-            st.markdown("#### 🚨 미배정 대기소")
+            st.markdown("#### 📊 미배정 대기소")
             if unused_tongbas:
                 st.warning("사이즈가 달라 배정되지 못한 통바입니다. 복사해서 사용하세요!")
                 for t in unused_tongbas:
