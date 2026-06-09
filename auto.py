@@ -120,7 +120,7 @@ if not st.session_state["logged_in"]:
 # 2. 파싱 및 스마트 매칭 엔진
 # ==========================================
 def clean_kcc_name(name):
-    return re.sub(r'^(?i)HW\s*ONE\s*(\(V\))?[_\s]*', '', str(name)).strip()
+    return re.sub(r'^HW\s*ONE\s*(\(V\))?[_\s]*', '', str(name), flags=re.IGNORECASE).strip()
 
 def get_tongba_style(model_str):
     t = str(model_str).upper().replace(" ", "")
