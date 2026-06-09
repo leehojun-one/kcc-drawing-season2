@@ -339,12 +339,11 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     is_right_vent = "우" in vent_dir
     
     splits = []
-    is_ub = "(U/B)" in t_upper or "언발란스" in t_upper or (w1 > 0) # 💡 [해결] w1 값이 있으면 무조건 언발란스 연산 가동!
     is_turning = "우핸들좌힌지" in (t_upper + str(vent_dir) + str(product).replace(" ", "")) or "좌핸들우힌지" in (t_upper + str(vent_dir) + str(product).replace(" ", ""))
 
     if '통바ㅁ' not in t_upper and '통바ㄷ' not in t_upper and not is_turning:
         if "2W" in t_upper:
-            if w1 > 0:  # 💡 [해결] 2W 창 형태 구분 시, 텍스트와 상관없이 w1 수치가 있으면 비율대로 사시 칸 분할!
+            if w1 > 0:  
                 splits = [w1] if is_left_vent else [w - w1]
             else:
                 if "1:2" in t_upper:
@@ -408,14 +407,16 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 _is_left, _is_right = is_left_vent, is_right_vent
                 if not _is_left and not _is_right: _is_right = True 
                 
-                # 💡 [해결] w1 치수 텍스트 색상을 시인성이 뛰어난 'red'(빨간색)로 전면 수정!
+                # 💡 [복구 완료] 미쓰리가 빼먹었던 #(망) 출력 조건문을 좌/우 벤트 모두에 완벽하게 원상복구했습니다!
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    if has_screen: ax.text(sw/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                     
             elif "3W" in t_upper:
                 ax.text((splits[0] + splits[1])/2, h/2, t_upper, ha='center', va='center', color='black', fontsize=10, fontweight='bold', bbox=txt_bbox)
@@ -426,9 +427,11 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(splits[0]/2, h/2, "▶", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    if has_screen: ax.text(splits[0]/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 if _is_right:
                     ax.text(splits[1] + (w-splits[1])/2, h/2, "◀", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
 
         if handle_h and not ("핸들" in door_info and "힌지" in door_info):
             ax.plot([0, w], [handle_h, handle_h], color='red', linestyle='--', linewidth=0.8, alpha=0.6)
