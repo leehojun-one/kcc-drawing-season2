@@ -449,7 +449,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     t_left_list = parse_tongba_input(t_left_str, h)
     t_right_list = parse_tongba_input(t_right_str, h)
 
-    # 💡 [소괄호 패치] 대괄호 -> 소괄호() 표기로 교체!
+    # 상부 통바
     current_y = h
     for t in t_top_list:
         thick_v = t['thick'] * t['scale'] 
@@ -461,6 +461,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.text(w/2, current_y + thick_v/2, full_text, ha='center', va='center', fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
         current_y += thick_v
 
+    # 하부 통바
     current_y = 0
     for t in t_bot_list:
         thick_v = t['thick'] * t['scale']
@@ -472,6 +473,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(w/2, current_y + thick_v/2, full_text, ha='center', va='center', fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
 
+    # 좌측 통바 (🛠️ 에러 해결: full_text 변수 정상 주입)
     current_x = 0
     for t in t_left_list:
         thick_v = t['thick'] * t['scale']
@@ -481,8 +483,9 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.add_patch(patches.Rectangle((current_x, start_y), thick_v, t_len, facecolor=t['color'], edgecolor='black', linewidth=1.0))
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
-        ax.text(current_x + thick_v/2, start_y + t_len/2, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
+        ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
 
+    # 우측 통바 (🛠️ 에러 해결: full_text 변수 정상 주입)
     current_x = w
     for t in t_right_list:
         thick_v = t['thick'] * t['scale']
@@ -491,7 +494,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.add_patch(patches.Rectangle((current_x, start_y), thick_v, t_len, facecolor=t['color'], edgecolor='black', linewidth=1.0))
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
-        ax.text(current_x + thick_v/2, start_y + t_len/2, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
+        ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
         current_x += thick_v
 
     display_name = model_name if model_name else product
@@ -509,7 +512,6 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     VIEW_W = overall_max_w + (MARGIN_X * 2)
     VIEW_H = overall_max_h + MARGIN_Y_TOP + MARGIN_Y_BOT
     
-    # 💡 [팀장님 커스텀] 줌인 비율! (여백 없이 꽉 차게 원하시면 여기서 조절)
     ZOOM_OUT = 1.0 
     
     VIEW_W = VIEW_W * ZOOM_OUT
@@ -541,7 +543,6 @@ def generate_a3_pdf_and_images(draw_data, p_name, s_addr, scale_bounds):
             fig.patches.extend([patches.Rectangle((0.015, 0.02), 0.97, 0.96, fill=False, color='#1E293B', lw=2.5, transform=fig.transFigure, figure=fig)])
             fig.patches.extend([patches.Rectangle((0.015, 0.92), 0.97, 0.06, fill=True, color='#F8FAFC', ec='#1E293B', lw=2.5, transform=fig.transFigure, figure=fig)])
             
-            # 우측 상단에 현재 로그인된 작성자 이름(팀장님 혹은 직원명)도 함께 표기되도록 살짝 센스를 발휘했습니다!
             author_name = st.session_state.get("user_name", "")
             fig.text(0.5, 0.95, f"🏢 파트너: {p_name}      |      📍 현장: {s_addr}      |      ✍️ 작성자: {author_name}", ha='center', va='center', fontsize=16, fontweight='bold', color='#0F172A')
             
@@ -566,7 +567,6 @@ def generate_a3_pdf_and_images(draw_data, p_name, s_addr, scale_bounds):
             pdf.savefig(fig)
             
             img_buf = io.BytesIO()
-            # 💡 [화질 개선 패치] dpi=600 으로 8K급 초고화질 출력!
             fig.savefig(img_buf, format='png', dpi=600, bbox_inches='tight')
             img_bufs.append(img_buf.getvalue())
             
@@ -586,11 +586,9 @@ def save_edits(uid):
     st.session_state[f"saved_right_{uid}"] = st.session_state.get(f"in_right_{uid}", "")
     st.session_state[f"status_{uid}"] = "confirmed"
 
-# 타이틀에 접속자 이름 표기
 st.title(f"🪟 KCC홈씨씨 창호도면 자동화 시스템 (사용자: {st.session_state.get('user_name', '')})")
 
 if st.button("🔄 시스템 초기화 (새로고침)", type="primary", use_container_width=True):
-    # 로그아웃 방지를 위해 특정 정보만 삭제
     for key in list(st.session_state.keys()):
         if key not in ["logged_in", "user_name", "user_sabun"]:
             del st.session_state[key]
@@ -600,7 +598,6 @@ uploaded_file = st.file_uploader("📂 견적서 엑셀 파일 업로드", type=
 
 if uploaded_file:
     if "last_file_id" not in st.session_state or st.session_state["last_file_id"] != uploaded_file.file_id:
-        # 새로운 파일 업로드 시 세션 일부만 클리어
         for key in list(st.session_state.keys()):
             if key.startswith("saved_") or key.startswith("status_"):
                 del st.session_state[key]
@@ -637,16 +634,14 @@ if uploaded_file:
                 if total_bom_qty == total_used_qty:
                     st.success(f"✅ 완벽 일치!\n(발주 {total_bom_qty}개 = 도면 {total_used_qty}개)")
                 else:
-                    st.error(f"🚨 삐용삐용 불일치!\n발주내역: {total_bom_qty}개\n도면적용: {total_used_qty}개\n(X2 입력 등 확인 요망)")
-
+                    st.error(f"🚨 불일치!\n발주내역: {total_bom_qty}개\n도면적용: {total_used_qty}개")
             else: 
                 st.info("통바 내역 없음")
             
             st.divider()
-            
             st.markdown("#### 📊 미배정 대기소")
             if unused_tongbas:
-                st.warning("사이즈가 달라 배정되지 못한 통바입니다. 복사해서 사용하세요!")
+                st.warning("사이즈가 달라 배정되지 못한 통바입니다.")
                 for t in unused_tongbas:
                     st.code(t)
             else:
@@ -708,16 +703,15 @@ if uploaded_file:
                             st.divider()
 
     with tab2:
-        st.subheader("🖨️ A3 출력 및 카카오톡 전송 센터")
-        st.info("사무실 출력용(PDF) 파일과 현장 카톡 전송용 8K 이미지를 추출합니다. 굽는 순간 시스템에 자동 로그가 남습니다! 😊")
+        st.subheader("🖨️ A3 출력 및 카톡 전송 센터")
+        st.info("사무실 출력용(PDF) 파일과 현장 카톡 전송용 이미지를 추출합니다.")
         
         c1, c2 = st.columns(2)
         with c1: partner_input = st.text_input("🏢 파트너명 (도면 헤더용)", value=ext_partner)
         with c2: address_input = st.text_input("📍 현장주소 (도면 헤더용)", value=ext_address)
         
         if st.button("📄 도면 굽기 (출력용 PDF & 카톡용 이미지 추출)", type="primary", use_container_width=True):
-            with st.spinner("도면 굽는 중... (과정에 따라 사용 기록이 팀장님께 보고됩니다 🚀)"):
-                
+            with st.spinner("도면 생성 중..."):
                 final_draw_data = []
                 for uid, win in enumerate(draw_data):
                     win_copy = win.copy()
@@ -728,11 +722,9 @@ if uploaded_file:
                     final_draw_data.append(win_copy)
                 
                 pdf_bytes, img_bytes_list = generate_a3_pdf_and_images(final_draw_data, partner_input, address_input, overall_scale_bounds)
-                
-                # 💡 [핵심] 여기에 로그 기록 함수가 발동됩니다!
                 log_usage(partner_input, address_input, len(final_draw_data))
                 
-                st.success("🎉 도면 생성 완료! 사용 로그가 성공적으로 기록되었습니다. 아래에서 다운로드하세요.")
+                st.success("🎉 도면 생성 완료! 사용 로그가 성공적으로 기록되었습니다.")
                 
                 st.download_button(
                     label="📥 A3 도면 PDF 다운로드 (사무실 출력용)",
@@ -744,7 +736,6 @@ if uploaded_file:
                 
                 st.divider()
                 st.markdown("### 📱 카카오톡 전송용 이미지 갤러리")
-                st.caption("👇 이미지를 우클릭(또는 꾹 눌러서) '이미지 복사' 후 카톡 창에 바로 붙여넣기 하세요!")
                 
                 for idx, img_bytes in enumerate(img_bytes_list):
                     st.markdown(f"#### 📄 도면 페이지 {idx + 1}")
