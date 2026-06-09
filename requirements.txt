@@ -1,4 +1,3 @@
-apt-get install -y fonts-nanum
 streamlit
 pandas
 matplotlib
