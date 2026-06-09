@@ -20,6 +20,8 @@ if platform.system() == 'Windows':
     plt.rc('font', family='Malgun Gothic')
 elif platform.system() == 'Darwin':
     plt.rc('font', family='AppleGothic')
+else:
+    plt.rc('font', family='sans-serif')
 plt.rcParams['axes.unicode_minus'] = False 
 
 HOMECC_SLOGAN = "공간에 가치를 더하는 프리미엄 창호, KCC글라스 홈씨씨창호"
