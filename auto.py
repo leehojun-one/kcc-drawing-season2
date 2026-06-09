@@ -483,7 +483,6 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
     
-    # 💡 [구조 개선] 좌측 통바 덩어리의 X축 중심점 확보
     left_idx_x = current_x / 2 if t_left_list else -100
 
     # 우측 통바
@@ -498,7 +497,6 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
         current_x += thick_v
     
-    # 💡 [구조 개선] 우측 통바 덩어리의 X축 중심점 확보
     right_idx_x = (w + current_x) / 2 if t_right_list else w + 100
 
     display_name = model_name if model_name else product
@@ -509,9 +507,9 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
     
-    # 💡 [해결] 치수선 레벨까지 멀리 내려가지 않고, 좌/우 해당 통바 단면의 바로 밑바닥 라인(-30)에 정상 가로 방향으로 중첩 정보 출력!
-    left_stacked_texts = [f"{t['name']} X{t['qty']}" for t in t_left_list if t['qty'] > 1]
-    right_stacked_texts = [f"{t['name']} X{t['qty']}" for t in t_right_list if t['qty'] > 1]
+    # 💡 [해결] 옆에 다른 자재가 와도 안 겹치게, 자재명 다 빼고 깔끔하게 오직 수량('X2')만 정상 가로 방향으로 기입!
+    left_stacked_texts = [f"X{t['qty']}" for t in t_left_list if t['qty'] > 1]
+    right_stacked_texts = [f"X{t['qty']}" for t in t_right_list if t['qty'] > 1]
     
     if left_stacked_texts:
         left_txt = "\n".join(left_stacked_texts)
@@ -722,7 +720,7 @@ if uploaded_file:
         st.subheader("🖨️ A3 출력 및 카톡 전송 센터")
         st.info("사무실 출력용(PDF) 파일과 현장 카톡 전송용 이미지를 추출합니다.")
         
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns([1, 1])
         with c1: partner_input = st.text_input("🏢 파트너명 (도면 헤더용)", value=ext_partner)
         with c2: address_input = st.text_input("📍 현장주소 (도면 헤더용)", value=ext_address)
         
