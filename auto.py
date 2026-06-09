@@ -73,7 +73,7 @@ def init_gsheet():
         return None
 
 def log_usage(partner_name, site_address, doc_count):
-    """도면을 구울 때마다 누가 얼마나 썼인지 구글 시트에 몰래(?) 기록합니다."""
+    """도면을 구울 때마다 누가 얼마나 썼는지 구글 시트에 몰래(?) 기록합니다."""
     try:
         sheet = init_gsheet()
         if sheet:
@@ -407,16 +407,15 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 _is_left, _is_right = is_left_vent, is_right_vent
                 if not _is_left and not _is_right: _is_right = True 
                 
-                # 💡 [복구 완료] 미쓰리가 빼먹었던 #(망) 출력 조건문을 좌/우 벤트 모두에 완벽하게 원상복구했습니다!
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(sw/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(sw/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                     
             elif "3W" in t_upper:
                 ax.text((splits[0] + splits[1])/2, h/2, t_upper, ha='center', va='center', color='black', fontsize=10, fontweight='bold', bbox=txt_bbox)
@@ -427,11 +426,11 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(splits[0]/2, h/2, "▶", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(splits[0]/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(splits[0]/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 if _is_right:
                     ax.text(splits[1] + (w-splits[1])/2, h/2, "◀", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
 
         if handle_h and not ("핸들" in door_info and "힌지" in door_info):
             ax.plot([0, w], [handle_h, handle_h], color='red', linestyle='--', linewidth=0.8, alpha=0.6)
@@ -483,6 +482,9 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
+    
+    # 💡 [구조 개선] 좌측 통바 덩어리의 X축 중심점 확보
+    left_idx_x = current_x / 2 if t_left_list else -100
 
     # 우측 통바
     current_x = w
@@ -495,6 +497,9 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
         current_x += thick_v
+    
+    # 💡 [구조 개선] 우측 통바 덩어리의 X축 중심점 확보
+    right_idx_x = (w + current_x) / 2 if t_right_list else w + 100
 
     display_name = model_name if model_name else product
     
@@ -504,9 +509,21 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
     
+    # 💡 [해결] 치수선 레벨까지 멀리 내려가지 않고, 좌/우 해당 통바 단면의 바로 밑바닥 라인(-30)에 정상 가로 방향으로 중첩 정보 출력!
+    left_stacked_texts = [f"{t['name']} X{t['qty']}" for t in t_left_list if t['qty'] > 1]
+    right_stacked_texts = [f"{t['name']} X{t['qty']}" for t in t_right_list if t['qty'] > 1]
+    
+    if left_stacked_texts:
+        left_txt = "\n".join(left_stacked_texts)
+        ax.text(left_idx_x, -30 - total_bot_offset, left_txt, ha='center', va='top', fontsize=10, fontweight='bold', color='red', bbox=txt_bbox)
+        
+    if right_stacked_texts:
+        right_txt = "\n".join(right_stacked_texts)
+        ax.text(right_idx_x, -30 - total_bot_offset, right_txt, ha='center', va='top', fontsize=10, fontweight='bold', color='red', bbox=txt_bbox)
+    
     MARGIN_X = 400  
     MARGIN_Y_TOP = 450 
-    MARGIN_Y_BOT = 400 
+    MARGIN_Y_BOT = 550  
     
     VIEW_W = overall_max_w + (MARGIN_X * 2)
     VIEW_H = overall_max_h + MARGIN_Y_TOP + MARGIN_Y_BOT
