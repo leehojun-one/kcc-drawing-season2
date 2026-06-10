@@ -544,7 +544,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         elif '로이' in glass_text or '컬러로이' in glass_text or '더블로이' in glass_text:
             glass_color = '#1D4ED8'  # 💙 로이 시리즈 단어가 식별되면 라인 전체를 파란색으로!
             
-        ax.text(w/2, h + 150, glass_text, ha='center', va='bottom', fontsize=9, fontweight='bold', color=glass_color)
+        ax.text(w/2, h + 200, glass_text, ha='center', va='bottom', fontsize=9, fontweight='bold', color=glass_color)
     
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
