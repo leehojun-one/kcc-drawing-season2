@@ -244,17 +244,28 @@ def parse_any_quotation(file_buffer):
         model_name = clean_kcc_name(str(main_row.get('모델명', '')).strip())
         w_shape_orig = str(main_row.get('창형태', ''))
         
-        # 💡 [버그 완치 부위] 엉뚱한 행의 텍스트 및 날짜 꼬임 현상을 100% 방어하는 쉴드 가동
+        # 💡 [버그 완치 부위] 날짜 및 최종계산일 행을 완전히 스킵하고 오직 순수 유리 사양 셀만 정밀 타격하는 보안 필터
         def clean_glass_val(val):
             val_str = str(val).strip()
             if val_str in ['nan', 'None', 'X', '0', '-', '', '디폴트']:
                 return ""
-            if re.match(r'^\d{4}[.\-/]\d{2}[.\-/]\d{2}', val_str):  # 날짜 텍스트 원천 차단
+            if re.match(r'^\d{4}[.\-/]\d{2}[.\-/]\d{2}', val_str) or '최종계산일' in val_str:
                 return ""
             return val_str
                 
-        glass_in = clean_glass_val(main_row.get('내부유리종류', ''))
-        glass_out = clean_glass_val(main_row.get('외부유리종류', ''))
+        # 팀장님 설명대로 이중창은 1번째 행(내부)과 2번째 행(외부)의 셀 텍스트를 정확히 낚아챕니다.
+        glass_list = []
+        if len(group) >= 1:
+            g1 = clean_glass_val(group.iloc[0].get('내부유리종류', ''))
+            if g1: glass_list.append(g1)
+        if len(group) >= 2:
+            loc_val2 = str(group.iloc[1].get('설치위치', '')).strip()
+            if '비고' not in loc_val2:  # 비고 행 오염 방지
+                g2 = clean_glass_val(group.iloc[1].get('내부유리종류', ''))
+                if g2: glass_list.append(g2)
+        
+        glass_in = glass_list[0] if len(glass_list) > 0 else ""
+        glass_out = glass_list[1] if len(glass_list) > 1 else ""
         
         is_independent = '통바ㅁ' in w_shape_orig.replace(" ","") or '통바ㄷ' in w_shape_orig.replace(" ","")
         is_supplementary_tongba = not is_independent and ('CB-' in model_name.upper() or '각도바' in model_name)
@@ -330,40 +341,8 @@ def parse_any_quotation(file_buffer):
     return windows_for_drawing, tongba_bom, unused_tongbas, (overall_max_w, overall_max_h), partner_name, site_address
 
 # ==========================================
-# 3. 렌더링 엔진 관련 보조 함수 및 메인
+# 3. 렌더링 엔진
 # ==========================================
-def draw_split_color_text(ax, x_center, y, full_text, font_size, scale_bounds):
-    """자간 정렬을 칼같이 유지하면서 특정 예약어만 파란색/빨간색으로 분할 렌더링하는 명품 함수"""
-    tokens = re.split(r'(더블로이|컬러로이|로이|미스트)', full_text)
-    
-    view_w = scale_bounds[0] + 800
-    token_data = []
-    total_width = 0
-    
-    for token in tokens:
-        if not token: continue
-        if token in ['로이', '컬러로이', '더블로이']:
-            color = '#1D4ED8'  # 💙 로이 패밀리는 선명한 파란색
-        elif token == '미스트':
-            color = '#DC2626'  # ❤️ 미스트는 완벽한 빨간색
-        else:
-            color = 'black'    # 🖤 나머지는 깔끔한 검은색
-            
-        w_token = 0
-        for c in token:
-            if ord(c) > 127:  # 한글 가로 비율 매칭
-                w_token += font_size * 1.0 * (view_w / 297.5)
-            else:            # 영문/숫자/공백/기호 가로 비율 매칭
-                w_token += font_size * 0.52 * (view_w / 297.5)
-                
-        token_data.append((token, color, w_token))
-        total_width += w_token
-        
-    start_x = x_center - total_width / 2
-    for token, color, w_token in token_data:
-        ax.text(start_x, y, token, ha='left', va='bottom', fontsize=font_size, fontweight='bold', color=color)
-        start_x += w_token
-
 def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, glass_in, glass_out, handle_h, vent_dir, has_screen, t_top_str, t_bot_str, t_left_str, t_right_str, scale_bounds):
     
     overall_max_w, overall_max_h = scale_bounds
@@ -449,11 +428,13 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    # 💡 [보존] 팀장님 전용 최적 간격 수치인 +250 영구 박제!
                     if has_screen: ax.text(sw/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
+                    # 💡 [보존] 팀장님 전용 최적 간격 수치인 +250 영구 박제!
                     if has_screen: ax.text(sw + (w-sw)/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                     
             elif "3W" in t_upper:
@@ -538,12 +519,14 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     
     right_idx_x = (w + current_x) / 2 if t_right_list else w + 100
 
-    # 💡 [최종본 기준 간격 완벽 복원] 개별 text 객체 생성을 폐기하고 \n 블록 방식으로 원복해 글자 겹침을 100% 진압했습니다!
+    # 💡 [레이아웃 완전 복원 부위] 인위적인 분할을 걷어내고, 오리지널의 무결점 정렬 엔진으로 회귀했습니다!
     display_name = model_name if model_name else product
-    top_title_text = f"[{seq}] {loc}\n{display_name} / {win_type}"
-    ax.text(w/2, h + 140, top_title_text, ha='center', va='bottom', fontsize=10, fontweight='bold', linespacing=1.3)
     
-    # 💡 [유리 사양 싱글라인 엔진 가동] 이중창/단창 판단 후 한 줄로 표기 (접두사 제거 완료)
+    # 1. 상단 메인 헤더: 순번, 설치위치, 모델명 / 창형태 통합 렌더링 (\n 단일 블록으로 자간 왜곡 100% 진압)
+    top_title_text = f"[{seq}] {loc}\n{display_name} / {win_type}"
+    ax.text(w/2, h + 160, top_title_text, ha='center', va='bottom', fontsize=10, fontweight='bold', linespacing=1.2)
+    
+    # 2. 유리사양 문자열 스마트 빌드 (이중창은 중간에 '/' 삽입, 단창은 한 줄 출력, 접두사 전면 삭제)
     if glass_in and glass_out:
         glass_text = f"{glass_in} / {glass_out}"
     elif glass_in:
@@ -553,8 +536,15 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     else:
         glass_text = ""
         
+    # 3. 하단 유리 헤더: 핵심 키워드 유무에 따라 라인 통채색 처리 (자간 왜곡 원천 차단형 컬러링 기술)
     if glass_text:
-        draw_split_color_text(ax, w/2, h + 50, glass_text, 10, scale_bounds)
+        glass_color = 'black'
+        if '미스트' in glass_text:
+            glass_color = '#DC2626'  # ❤️ 미스트 단어가 식별되면 라인 전체를 빨간색으로!
+        elif '로이' in glass_text or '컬러로이' in glass_text or '더블로이' in glass_text:
+            glass_color = '#1D4ED8'  # 💙 로이 시리즈 단어가 식별되면 라인 전체를 파란색으로!
+            
+        ax.text(w/2, h + 60, glass_text, ha='center', va='bottom', fontsize=10, fontweight='bold', color=glass_color)
     
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
