@@ -244,18 +244,17 @@ def parse_any_quotation(file_buffer):
         model_name = clean_kcc_name(str(main_row.get('모델명', '')).strip())
         w_shape_orig = str(main_row.get('창형태', ''))
         
-        # 💡 [저인망 멀티 사양 추출 엔진] 그룹 전체에서 유리 정보 축적
-        glass_specs = []
-        for _, r in group.iterrows():
-            g_in_val = str(r.get('내부유리종류', '')).strip()
-            g_out_val = str(r.get('외부유리종류', '')).strip()
-            if g_in_val and g_in_val not in ['nan', 'None', 'X', '0', '-', ''] and g_in_val not in glass_specs:
-                glass_specs.append(g_in_val)
-            if g_out_val and g_out_val not in ['nan', 'None', 'X', '0', '-', ''] and g_out_val not in glass_specs:
-                glass_specs.append(g_out_val)
+        # 💡 [버그 완치 부위] 엉뚱한 행의 텍스트 및 날짜 꼬임 현상을 100% 방어하는 쉴드 가동
+        def clean_glass_val(val):
+            val_str = str(val).strip()
+            if val_str in ['nan', 'None', 'X', '0', '-', '', '디폴트']:
+                return ""
+            if re.match(r'^\d{4}[.\-/]\d{2}[.\-/]\d{2}', val_str):  # 날짜 텍스트 원천 차단
+                return ""
+            return val_str
                 
-        glass_in = glass_specs[0] if len(glass_specs) > 0 else ""
-        glass_out = glass_specs[1] if len(glass_specs) > 1 else ""
+        glass_in = clean_glass_val(main_row.get('내부유리종류', ''))
+        glass_out = clean_glass_val(main_row.get('외부유리종류', ''))
         
         is_independent = '통바ㅁ' in w_shape_orig.replace(" ","") or '통바ㄷ' in w_shape_orig.replace(" ","")
         is_supplementary_tongba = not is_independent and ('CB-' in model_name.upper() or '각도바' in model_name)
@@ -331,8 +330,40 @@ def parse_any_quotation(file_buffer):
     return windows_for_drawing, tongba_bom, unused_tongbas, (overall_max_w, overall_max_h), partner_name, site_address
 
 # ==========================================
-# 3. 렌더링 엔진
+# 3. 렌더링 엔진 관련 보조 함수 및 메인
 # ==========================================
+def draw_split_color_text(ax, x_center, y, full_text, font_size, scale_bounds):
+    """자간 정렬을 칼같이 유지하면서 특정 예약어만 파란색/빨간색으로 분할 렌더링하는 명품 함수"""
+    tokens = re.split(r'(더블로이|컬러로이|로이|미스트)', full_text)
+    
+    view_w = scale_bounds[0] + 800
+    token_data = []
+    total_width = 0
+    
+    for token in tokens:
+        if not token: continue
+        if token in ['로이', '컬러로이', '더블로이']:
+            color = '#1D4ED8'  # 💙 로이 패밀리는 선명한 파란색
+        elif token == '미스트':
+            color = '#DC2626'  # ❤️ 미스트는 완벽한 빨간색
+        else:
+            color = 'black'    # 🖤 나머지는 깔끔한 검은색
+            
+        w_token = 0
+        for c in token:
+            if ord(c) > 127:  # 한글 가로 비율 매칭
+                w_token += font_size * 1.0 * (view_w / 297.5)
+            else:            # 영문/숫자/공백/기호 가로 비율 매칭
+                w_token += font_size * 0.52 * (view_w / 297.5)
+                
+        token_data.append((token, color, w_token))
+        total_width += w_token
+        
+    start_x = x_center - total_width / 2
+    for token, color, w_token in token_data:
+        ax.text(start_x, y, token, ha='left', va='bottom', fontsize=font_size, fontweight='bold', color=color)
+        start_x += w_token
+
 def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, glass_in, glass_out, handle_h, vent_dir, has_screen, t_top_str, t_bot_str, t_left_str, t_right_str, scale_bounds):
     
     overall_max_w, overall_max_h = scale_bounds
@@ -418,13 +449,11 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    # 💡 [보존] 팀장님 전용 가독성 수치인 +250 완벽 사수!
                     if has_screen: ax.text(sw/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    # 💡 [보존] 팀장님 전용 가독성 수치인 +250 완벽 사수!
                     if has_screen: ax.text(sw + (w-sw)/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                     
             elif "3W" in t_upper:
@@ -436,12 +465,10 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(splits[0]/2, h/2, "▶", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    # 💡 [보존] 팀장님 전용 가독성 수치인 +250 완벽 사수!
                     if has_screen: ax.text(splits[0]/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 if _is_right:
                     ax.text(splits[1] + (w-splits[1])/2, h/2, "◀", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    # 💡 [보존] 팀장님 전용 가독성 수치인 +250 완벽 사수!
                     if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
 
         if handle_h and not ("핸들" in door_info and "힌지" in door_info):
@@ -497,7 +524,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     
     left_idx_x = current_x / 2 if t_left_list else -100
 
-    # 우측 통바 
+    # 우측 통바
     current_x = w
     for t in t_right_list:
         thick_v = t['thick'] * t['scale']
@@ -507,63 +534,27 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         
         full_text = f"{t['name']} ({t['len']})" + (f" X{t['qty']}" if t['qty'] > 1 else "")
         ax.text(current_x + thick_v/2, start_y + t_len/2, full_text, ha='center', va='center', rotation=90, fontsize=TEXT_SIZE, color=t['text_color'], fontweight='bold', stretch='condensed')
-        # 💡 [오타 완치 부위] 중복 라인 삭제 및 오타(think_v) 칼같이 해결 완료!
         current_x += thick_v
     
     right_idx_x = (w + current_x) / 2 if t_right_list else w + 100
 
-    # 💡 [정밀 낱말 매칭 분할 렌더러] 특정 글자만 골라서 색깔을 칠하는 특수 엔진 가동
-    def draw_split_color_text(ax, x_center, y, label, value, font_size, scale_bounds):
-        full_text = f"{label}: {value}" if value else label
-        tokens = re.split(r'(더블로이|컬러로이|로이|미스트)', full_text)
-        
-        view_w = scale_bounds[0] + 800
-        factor = view_w / 297.5
-        
-        total_width = 0
-        token_data = []
-        for token in tokens:
-            if not token: continue
-            if token in ['로이', '컬러로이', '더블로이']:
-                color = '#1D4ED8'  # 💙 로이 시리즈는 선명한 파란색
-            elif token == '미스트':
-                color = '#DC2626'  # ❤️ 미스트는 직관적인 빨간색
-            else:
-                color = 'black'    # 🖤 일반 글자는 명확한 검은색
-                
-            w_token = 0
-            for c in token:
-                if ord(c) > 127: # 한글 폰트 길이 보정
-                    w_token += font_size * factor * 0.85
-                else:            # 영문/공백/기호 길이 보정
-                    w_token += font_size * factor * 0.45
-            
-            token_data.append((token, color, w_token))
-            total_width += w_token
-            
-        start_x = x_center - total_width / 2
-        for token, color, w_token in token_data:
-            ax.text(start_x, y, token, ha='left', va='bottom', fontsize=font_size, fontweight='bold', color=color)
-            start_x += w_token
-
+    # 💡 [최종본 기준 간격 완벽 복원] 개별 text 객체 생성을 폐기하고 \n 블록 방식으로 원복해 글자 겹침을 100% 진압했습니다!
     display_name = model_name if model_name else product
+    top_title_text = f"[{seq}] {loc}\n{display_name} / {win_type}"
+    ax.text(w/2, h + 140, top_title_text, ha='center', va='bottom', fontsize=10, fontweight='bold', linespacing=1.3)
     
-    # 1. 상단: [순번] 설치위치
-    ax.text(w/2, h + 390, f"[{seq}] {loc}", ha='center', va='bottom', fontsize=10, fontweight='bold', color='black')
-    
-    # 2. 중단: 모델명 / 창형태 (직원분들 요청사항 1번 매칭)
-    ax.text(w/2, h + 260, f"{display_name} / {win_type}", ha='center', va='bottom', fontsize=10, fontweight='bold', color='black')
-    
-    # 3. 하단: 타겟형 분할 컬러링 (직원분들 요청사항 2, 3번 매칭)
+    # 💡 [유리 사양 싱글라인 엔진 가동] 이중창/단창 판단 후 한 줄로 표기 (접두사 제거 완료)
     if glass_in and glass_out:
-        draw_split_color_text(ax, w/2, h + 130, "내부유리", glass_in, 9, scale_bounds)
-        draw_split_color_text(ax, w/2, h + 20, "외부유리", glass_out, 9, scale_bounds)
+        glass_text = f"{glass_in} / {glass_out}"
     elif glass_in:
-        draw_split_color_text(ax, w/2, h + 75, "유리", glass_in, 10, scale_bounds)
+        glass_text = glass_in
     elif glass_out:
-        draw_split_color_text(ax, w/2, h + 75, "유리", glass_out, 10, scale_bounds)
+        glass_text = glass_out
     else:
-        ax.text(w/2, h + 75, "유리사양 없음", ha='center', va='bottom', fontsize=10, fontweight='bold', color='black')
+        glass_text = ""
+        
+    if glass_text:
+        draw_split_color_text(ax, w/2, h + 50, glass_text, 10, scale_bounds)
     
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
