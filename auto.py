@@ -73,7 +73,7 @@ def init_gsheet():
         return None
 
 def log_usage(partner_name, site_address, doc_count):
-    """도면을 구울 때마다 누가 얼마나 썼는지 구글 시트에 몰래(?) 기록합니다."""
+    """도면을 구울 때마다 누가 얼마나 썼인지 구글 시트에 몰래(?) 기록합니다."""
     try:
         sheet = init_gsheet()
         if sheet:
@@ -245,7 +245,12 @@ def parse_any_quotation(file_buffer):
         loc = str(main_row.get('설치위치', '')).strip() if pd.notnull(main_row.get('설치위치')) else ""
         model_name = clean_kcc_name(str(main_row.get('모델명', '')).strip())
         w_shape_orig = str(main_row.get('창형태', ''))
-        glass_orig = str(main_row.get('내부유리종류', '')) if pd.notnull(main_row.get('내부유리종류')) else ""
+        
+        # 💡 [업그레이드] 내부유리종류 및 외부유리종류 동시 파싱 엔진 가동
+        glass_in = str(main_row.get('내부유리종류', '')).strip() if pd.notnull(main_row.get('내부유리종류')) else ""
+        glass_out = str(main_row.get('외부유리종류', '')).strip() if pd.notnull(main_row.get('외부유리종류')) else ""
+        if glass_in in ['nan', 'None']: glass_in = ""
+        if glass_out in ['nan', 'None']: glass_out = ""
         
         is_independent = '통바ㅁ' in w_shape_orig.replace(" ","") or '통바ㄷ' in w_shape_orig.replace(" ","")
         is_supplementary_tongba = not is_independent and ('CB-' in model_name.upper() or '각도바' in model_name)
@@ -302,7 +307,8 @@ def parse_any_quotation(file_buffer):
             if m4: auto_t_right.append(m4) 
 
         windows_for_drawing.append({
-            '순번': seq_num, '위치': loc, '제품명': prod_orig, '모델명': model_name, '형태': w_shape_orig, '유리종류': glass_orig,
+            '순번': seq_num, '위치': loc, '제품명': prod_orig, '모델명': model_name, '형태': w_shape_orig, 
+            'glass_in': glass_in, 'glass_out': glass_out,
             '가로(W)': w_val, '세로(H)': h_val, 'w1': w1_val, '핸들높이': handle_height, 'vent_dir': vent_dir, 'has_screen': has_screen,
             'auto_top': ",".join(auto_t_top), 'auto_bot': ",".join(auto_t_bot),
             'auto_left': ",".join(auto_t_left), 'auto_right': ",".join(auto_t_right)
@@ -323,11 +329,11 @@ def parse_any_quotation(file_buffer):
 # ==========================================
 # 3. 렌더링 엔진
 # ==========================================
-def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, glass, handle_h, vent_dir, has_screen, t_top_str, t_bot_str, t_left_str, t_right_str, scale_bounds):
+def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, glass_in, glass_out, handle_h, vent_dir, has_screen, t_top_str, t_bot_str, t_left_str, t_right_str, scale_bounds):
     
     overall_max_w, overall_max_h = scale_bounds
     t_upper = str(win_type).upper().replace(" ", "")
-    glass_str = str(glass)
+    glass_combined = str(glass_in) + str(glass_out)
     
     mist_color, mist_alpha, mist_hatch = '#BAE6FD', 0.5, '....'
     txt_bbox = dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.85)
@@ -363,7 +369,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         elif "4W" in t_upper:
             splits = [w / 4, 2 * w / 4, 3 * w / 4]
 
-    if "미스트" in glass_str:
+    if "미스트" in glass_combined:
         if not splits:
             ax.add_patch(patches.Rectangle((0, 0), w, h, facecolor=mist_color, hatch=mist_hatch, edgecolor='none', alpha=mist_alpha))
         else:
@@ -410,12 +416,12 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(sw/2, h/2, "▶ 좌", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(sw/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(sw/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 
                 if _is_right:
                     ax.text(sw + (w-sw)/2, h/2, "◀ 우", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(sw + (w-sw)/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(sw + (w-sw)/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                     
             elif "3W" in t_upper:
                 ax.text((splits[0] + splits[1])/2, h/2, t_upper, ha='center', va='center', color='black', fontsize=10, fontweight='bold', bbox=txt_bbox)
@@ -426,17 +432,17 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
                 if _is_left:
                     ax.text(splits[0]/2, h/2, "▶", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[0]/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(splits[0]/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(splits[0]/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
                 if _is_right:
                     ax.text(splits[1] + (w-splits[1])/2, h/2, "◀", ha='center', va='center', fontsize=11, fontweight='bold', bbox=txt_bbox)
                     if w1 > 0: ax.text(splits[1] + (w-splits[1])/2, h/2 - 200, f"{w1}", ha='center', va='center', fontsize=12, fontweight='bold', color='red')
-                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 250, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
+                    if has_screen: ax.text(splits[1] + (w-splits[1])/2, h/2 + 200, "#(망)", ha='center', va='center', fontsize=11, fontweight='bold', color='red', bbox=txt_bbox)
 
         if handle_h and not ("핸들" in door_info and "힌지" in door_info):
             ax.plot([0, w], [handle_h, handle_h], color='red', linestyle='--', linewidth=0.8, alpha=0.6)
             ax.text(w + 50, handle_h, f"핸들: {handle_h}", color='red', va='center', fontweight='bold', fontsize=9, bbox=txt_bbox)
 
-    if "미스트" in glass_str:
+    if "미스트" in glass_combined:
         ax.text(w/2, h * 0.8, "미스트", ha='center', va='center', color='red', fontsize=11, fontweight='bold', bbox=txt_bbox)
     
     if re.search(r'고정창', product, re.IGNORECASE) or "FIX" in t_upper:
@@ -499,15 +505,41 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     
     right_idx_x = (w + current_x) / 2 if t_right_list else w + 100
 
+    # 💡 [업그레이드 레이아웃 헤더] 1번&2번&3번 요청사항 처리부
     display_name = model_name if model_name else product
     
-    title_text = f"[{seq}] {loc}\n{display_name}\n{win_type} / {glass}" if glass else f"[{seq}] {loc}\n{display_name}\n{win_type}"
-    ax.text(w/2, h + 250, title_text, ha='center', va='bottom', fontsize=11, fontweight='bold', linespacing=1.3)
+    # 1. 상단 라인: 순번 및 설치위치
+    ax.text(w/2, h + 380, f"[{seq}] {loc}", ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    # 2. 중단 라인: 모델명 / 창형태 (전진 배치 매칭)
+    ax.text(w/2, h + 250, f"{display_name} / {win_type}", ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    # 3. 하단 라인: 내부유리종류 / 외부유리종류 멀티 컬러링 엔진 가동
+    def get_glass_color(g_str):
+        if not g_str: return "black"
+        if "더블로이" in g_str or "컬러로이" in g_str or "로이" in g_str:
+            return "#1D4ED8" # 🎨 로이 패밀리는 선명한 파란색
+        elif "미스트" in g_str:
+            return "red"     # 🎨 미스트는 경고/알림 빨간색
+        return "black"
+
+    if glass_in and glass_out:
+        color_in = get_glass_color(glass_in)
+        color_out = get_glass_color(glass_out)
+        # 세련된 싱글라인 멀티컬러 배치를 위한 3분할 앵커링 시스템
+        ax.text(w/2 - 25, h + 120, glass_in, ha='right', va='bottom', fontsize=11, fontweight='bold', color=color_in)
+        ax.text(w/2, h + 120, " / ", ha='center', va='bottom', fontsize=11, fontweight='bold', color='black')
+        ax.text(w/2 + 25, h + 120, glass_out, ha='left', va='bottom', fontsize=11, fontweight='bold', color=color_out)
+    elif glass_in:
+        color_in = get_glass_color(glass_in)
+        ax.text(w/2, h + 120, glass_in, ha='center', va='bottom', fontsize=11, fontweight='bold', color=color_in)
+    elif glass_out:
+        color_out = get_glass_color(glass_out)
+        ax.text(w/2, h + 120, glass_out, ha='center', va='bottom', fontsize=11, fontweight='bold', color=color_out)
     
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
     
-    # 💡 [해결] 옆에 다른 자재가 와도 안 겹치게, 자재명 다 빼고 깔끔하게 오직 수량('X2')만 정상 가로 방향으로 기입!
     left_stacked_texts = [f"X{t['qty']}" for t in t_left_list if t['qty'] > 1]
     right_stacked_texts = [f"X{t['qty']}" for t in t_right_list if t['qty'] > 1]
     
@@ -566,7 +598,7 @@ def generate_a3_pdf_and_images(draw_data, p_name, s_addr, scale_bounds):
                     win = chunk[idx]
                     render_window_on_ax(
                         ax, win['순번'], win['가로(W)'], win['세로(H)'], win['w1'], win['형태'], win['위치'],
-                        win['제품명'], win['모델명'], win['유리종류'], win.get('핸들높이'), win['vent_dir'], win['has_screen'],
+                        win['제품명'], win['모델명'], win['glass_in'], win['glass_out'], win.get('핸들높이'), win['vent_dir'], win['has_screen'],
                         win['auto_top'], win['auto_bot'], win['auto_left'], win['auto_right'],
                         scale_bounds
                     )
@@ -692,7 +724,7 @@ if uploaded_file:
                             
                             render_window_on_ax(
                                 ax, seq, win['가로(W)'], win['세로(H)'], win['w1'], win['형태'], win['위치'],
-                                win['제품명'], win['모델명'], win['유리종류'], win.get('핸들높이'), win['vent_dir'], win['has_screen'],
+                                win['제품명'], win['모델명'], win['glass_in'], win['glass_out'], win.get('핸들높이'), win['vent_dir'], win['has_screen'],
                                 curr_top, curr_bot, curr_left, curr_right, overall_scale_bounds 
                             )
                             
