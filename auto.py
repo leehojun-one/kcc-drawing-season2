@@ -524,7 +524,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     
     # 1. 상단 메인 헤더: 순번, 설치위치, 모델명 / 창형태 통합 렌더링 (\n 단일 블록으로 자간 왜곡 100% 진압)
     top_title_text = f"[{seq}] {loc}\n{display_name} / {win_type}"
-    ax.text(w/2, h + 350, top_title_text, ha='center', va='bottom', fontsize=11, fontweight='bold', linespacing=1.3)
+    ax.text(w/2, h + 400, top_title_text, ha='center', va='bottom', fontsize=11, fontweight='bold', linespacing=1.3)
     
     # 2. 유리사양 문자열 스마트 빌드 (이중창은 중간에 '/' 삽입, 단창은 한 줄 출력, 접두사 전면 삭제)
     if glass_in and glass_out:
