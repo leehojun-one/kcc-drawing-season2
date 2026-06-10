@@ -49,8 +49,8 @@ HOMECC_SLOGAN = "공간에 가치를 더하는 프리미엄 창호, KCC글라스
 # 💡 [디테일 4&5] 통바 배경은 더 연하게, 텍스트는 진한 맞춤 색상으로!
 TONGBA_INFO = {
     "CB-101*100": {"thick": 100, "color": "#E0F2FE", "text_color": "#1E3A8A", "scale": 1.3}, 
-    "CB-100*45": {"thick": 45, "color": "#FEF9C3", "text_color": "#991B1B", "scale": 1.7},   
-    "CB-45*45": {"thick": 45, "color": "#DCFCE7", "text_color": "#14532D", "scale": 1.7},    
+    "CB-100*45": {"thick": 60, "color": "#FEF9C3", "text_color": "#991B1B", "scale": 1.5},   
+    "CB-45*45": {"thick": 60, "color": "#DCFCE7", "text_color": "#14532D", "scale": 1.5},    
     "CB-135": {"thick": 60, "color": "#F3E8FF", "text_color": "#991B1B", "scale": 1.4}       
 }
 
@@ -524,7 +524,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
     
     # 1. 상단 메인 헤더: 순번, 설치위치, 모델명 / 창형태 통합 렌더링 (\n 단일 블록으로 자간 왜곡 100% 진압)
     top_title_text = f"[{seq}] {loc}\n{display_name} / {win_type}"
-    ax.text(w/2, h + 160, top_title_text, ha='center', va='bottom', fontsize=10, fontweight='bold', linespacing=1.2)
+    ax.text(w/2, h + 300, top_title_text, ha='center', va='bottom', fontsize=11, fontweight='bold', linespacing=1.4)
     
     # 2. 유리사양 문자열 스마트 빌드 (이중창은 중간에 '/' 삽입, 단창은 한 줄 출력, 접두사 전면 삭제)
     if glass_in and glass_out:
@@ -544,7 +544,7 @@ def render_window_on_ax(ax, seq, w, h, w1, win_type, loc, product, model_name, g
         elif '로이' in glass_text or '컬러로이' in glass_text or '더블로이' in glass_text:
             glass_color = '#1D4ED8'  # 💙 로이 시리즈 단어가 식별되면 라인 전체를 파란색으로!
             
-        ax.text(w/2, h + 60, glass_text, ha='center', va='bottom', fontsize=10, fontweight='bold', color=glass_color)
+        ax.text(w/2, h + 100, glass_text, ha='center', va='bottom', fontsize=9, fontweight='bold', color=glass_color)
     
     total_bot_offset = sum(t['thick'] * t['scale'] for t in t_bot_list)
     ax.text(w/2, -260 - total_bot_offset, f"{w} x {h}", ha='center', va='top', fontsize=11, fontweight='bold', color='#1E3A8A')
