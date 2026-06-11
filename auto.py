@@ -622,7 +622,7 @@ def generate_a3_pdf_and_images(draw_data, p_name, s_addr, scale_bounds):
             pdf.savefig(fig)
             
             img_buf = io.BytesIO()
-            fig.savefig(img_buf, format='png', dpi=600, bbox_inches='tight')
+            fig.savefig(img_buf, format='png', dpi=300, bbox_inches='tight')
             img_bufs.append(img_buf.getvalue())
             
             plt.close(fig)
