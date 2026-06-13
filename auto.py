@@ -279,7 +279,9 @@ def parse_any_quotation(file_buffer):
         prod_orig = clean_kcc_name(str(main_row.get('제품명', '')))
         if '기타견적' in prod_orig.replace(" ", ""): continue
 
-        seq_num = int(pd.to_numeric(main_row.get('순번'), errors='coerce'))
+        seq_num_raw = pd.to_numeric(main_row.get('순번'), errors='coerce')
+        if pd.isnull(seq_num_raw): continue
+        seq_num = int(seq_num_raw)
         loc = str(main_row.get('설치위치', '')).strip() if pd.notnull(main_row.get('설치위치')) else ""
         model_name = clean_kcc_name(str(main_row.get('모델명', '')).strip())
         w_shape_orig = str(main_row.get('창형태', ''))
@@ -331,20 +333,17 @@ def parse_any_quotation(file_buffer):
                 if '좌' in shape_val or '우' in shape_val or '핸들' in shape_val or '힌지' in shape_val:
                     break
 
-        # 핸들 높이 (블록 내 100~3000 범위 숫자 탐색)
+        # ★ [핸들높이 버그 수정]
+        # 기존: 비고 제외하고 행 전체 숫자 탐색 → 벤트 서브행의 W1(예:1100)을 핸들높이로 잘못 인식
+        # 수정: 비고행의 '잠금장치' 컬럼에서만 핸들높이 추출 (엑셀 구조상 비고행 잠금장치 셀에 숫자로 기입됨)
         handle_height = ""
-        for b_i in range(1, len(block)):
+        for b_i in range(len(block)):
             loc_check = str(block.iloc[b_i].get('설치위치', '')).strip()
             if '비고' in loc_check:
-                continue
-            for val in block.iloc[b_i].values:
-                try:
-                    num = float(val)
-                    if 100 <= num <= 3000:
-                        handle_height = int(num); break
-                except: pass
-            if handle_height:
-                break
+                lock_val = pd.to_numeric(block.iloc[b_i].get('잠금장치', ''), errors='coerce')
+                if pd.notnull(lock_val) and 100 <= lock_val <= 3000:
+                    handle_height = int(lock_val)
+                break  # 비고행은 블록당 1개이므로 찾으면 즉시 종료
 
         has_screen = True if pd.notnull(main_row.get('방충망')) and str(main_row.get('방충망')).strip().upper() not in ['', 'X', 'NONE', '0'] else False
 
