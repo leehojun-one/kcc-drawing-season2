@@ -199,130 +199,169 @@ def parse_any_quotation(file_buffer):
             if '현장주소' in val or '현장명' in val: site_address = row_vals[i+1] if i+1 < len(row_vals) else ""
 
     header_idx = df_raw[df_raw.isin(['설치위치']).any(axis=1)].index[0]
-    df = df_raw.iloc[header_idx+1:].copy()
-    df.columns = [str(c).replace('\n', '').replace(' ', '') for c in df_raw.iloc[header_idx]]
-    df = df[pd.to_numeric(df['순번'], errors='coerce').notnull()]
-    
+
+    # ★ 핵심 수정: 두 가지 엑셀 구조 모두 지원
+    # [구조A - 정상파일] 순번이 블록 내 모든 행에 채워짐 (행0,1,2 모두 순번=1)
+    # [구조B - 에러파일] 순번이 메인 행에만 있고 나머지 행은 순번=nan
+    # → 두 구조 모두: 순번의 "첫 등장" 인덱스만 뽑아 블록 시작점으로 사용하면 통일 처리 가능
+    df_all = df_raw.iloc[header_idx+1:].copy()
+    df_all.columns = [str(c).replace('\n', '').replace(' ', '') for c in df_raw.iloc[header_idx]]
+    df_all['_순번_num'] = pd.to_numeric(df_all['순번'], errors='coerce')
+
+    # 각 순번의 첫 등장 인덱스만 추출 (정상파일처럼 순번이 반복돼도 첫 행만 블록 시작점으로 사용)
+    seq_index_list = []
+    seen_seqs = set()
+    for idx, row in df_all.iterrows():
+        s = row['_순번_num']
+        if pd.notnull(s) and s not in seen_seqs:
+            seen_seqs.add(s)
+            seq_index_list.append(idx)
+
     windows_for_drawing = []
     tongba_bom = []
     all_tongbas = []
-    
-    for _, row in df.iterrows():
-        prod_orig = clean_kcc_name(str(row.get('제품명', '')).strip())
+
+    # 날짜/최종계산일 등 오염값 제거 필터
+    def clean_glass_val(val):
+        val_str = str(val).strip()
+        if val_str in ['nan', 'None', 'X', '0', '-', '', '디폴트', ' ']:
+            return ""
+        if re.match(r'^\d{4}[.\-/]\d{2}[.\-/]\d{2}', val_str) or '최종계산일' in val_str:
+            return ""
+        return val_str
+
+    def find_one_matching_bar(target_len, target_loc):
+        for t in all_tongbas:
+            if not t.get('used', False) and t.get('len') == target_len and target_loc and t.get('loc') == target_loc:
+                t['used'] = True; return f"{t.get('code')}({t.get('len')})"
+        for t in all_tongbas:
+            if not t.get('used', False) and t.get('len') == target_len and not t.get('loc'):
+                t['used'] = True; return f"{t.get('code')}({t.get('len')})"
+        for t in all_tongbas:
+            if not t.get('used', False) and t.get('len') == target_len:
+                t['used'] = True; return f"{t.get('code')}({t.get('len')})"
+        return None
+
+    # 1단계: 통바 BOM 수집 (순번 있는 메인행만 순회)
+    for si in seq_index_list:
+        main_row = df_all.loc[si]
+        prod_orig = clean_kcc_name(str(main_row.get('제품명', '')).strip())
         if '기타견적' in prod_orig.replace(" ", ""): continue
-            
-        loc = str(row.get('설치위치', '')).strip() if pd.notnull(row.get('설치위치')) else ""
-        model_orig = clean_kcc_name(str(row.get('모델명', '')).strip())
-        w_shape_orig = str(row.get('창형태', '')).strip()
-        
+
+        loc = str(main_row.get('설치위치', '')).strip() if pd.notnull(main_row.get('설치위치')) else ""
+        model_orig = clean_kcc_name(str(main_row.get('모델명', '')).strip())
+        w_shape_orig = str(main_row.get('창형태', '')).strip()
+
         is_independent = '통바ㅁ' in w_shape_orig.replace(" ","") or '통바ㄷ' in w_shape_orig.replace(" ","")
         is_supplementary_tongba = not is_independent and ('CB-' in model_orig.upper() or '각도바' in model_orig)
-        
-        w_val_raw = pd.to_numeric(row.get('길이(W)'), errors='coerce')
+
+        w_val_raw = pd.to_numeric(main_row.get('길이(W)'), errors='coerce')
         w_val = int(w_val_raw) if pd.notnull(w_val_raw) else 0
-        
-        h_val_raw = pd.to_numeric(row.get('높이(H)'), errors='coerce')
+        h_val_raw = pd.to_numeric(main_row.get('높이(H)'), errors='coerce')
         h_val = int(h_val_raw) if pd.notnull(h_val_raw) else 0
-        
-        qty_raw = pd.to_numeric(row.get('수량'), errors='coerce')
+        qty_raw = pd.to_numeric(main_row.get('수량'), errors='coerce')
         qty = int(qty_raw) if pd.notnull(qty_raw) and qty_raw > 0 else 1
-        
+
         if is_supplementary_tongba:
             length = max(w_val, h_val)
             zajae_name = model_orig if model_orig else prod_orig
             tongba_bom.append({'위치': loc, '자재명': zajae_name, '길이': length, '수량': qty})
-            for _ in range(qty): 
+            for _ in range(qty):
                 all_tongbas.append({'loc': loc, 'code': zajae_name, 'len': length, 'used': False})
 
-    for seq, group in df.groupby('순번'):
-        main_row = group.iloc[0]
+    # 2단계: 각 순번 블록을 슬라이싱하여 창호 도면 데이터 생성
+    for i, si in enumerate(seq_index_list):
+        # 블록 끝: 다음 순번 시작 직전까지 (없으면 df 끝까지)
+        ei = seq_index_list[i+1] if i+1 < len(seq_index_list) else df_all.index[-1]+1
+        block = df_all.loc[si:ei-1]  # ★ 비고행·방향행·외부유리행이 모두 포함된 완전한 블록
+
+        main_row = block.iloc[0]
         prod_orig = clean_kcc_name(str(main_row.get('제품명', '')))
         if '기타견적' in prod_orig.replace(" ", ""): continue
-            
+
         seq_num = int(pd.to_numeric(main_row.get('순번'), errors='coerce'))
         loc = str(main_row.get('설치위치', '')).strip() if pd.notnull(main_row.get('설치위치')) else ""
         model_name = clean_kcc_name(str(main_row.get('모델명', '')).strip())
         w_shape_orig = str(main_row.get('창형태', ''))
-        
-        # 💡 [버그 완치 부위] 날짜 및 최종계산일 행을 완전히 스킵하고 오직 순수 유리 사양 셀만 정밀 타격하는 보안 필터
-        def clean_glass_val(val):
-            val_str = str(val).strip()
-            if val_str in ['nan', 'None', 'X', '0', '-', '', '디폴트']:
-                return ""
-            if re.match(r'^\d{4}[.\-/]\d{2}[.\-/]\d{2}', val_str) or '최종계산일' in val_str:
-                return ""
-            return val_str
-                
-        # 팀장님 설명대로 이중창은 1번째 행(내부)과 2번째 행(외부)의 셀 텍스트를 정확히 낚아챕니다.
-        glass_list = []
-        if len(group) >= 1:
-            g1 = clean_glass_val(group.iloc[0].get('내부유리종류', ''))
-            if g1: glass_list.append(g1)
-        if len(group) >= 2:
-            loc_val2 = str(group.iloc[1].get('설치위치', '')).strip()
-            if '비고' not in loc_val2:  # 비고 행 오염 방지
-                g2 = clean_glass_val(group.iloc[1].get('내부유리종류', ''))
-                if g2: glass_list.append(g2)
-        
-        glass_in = glass_list[0] if len(glass_list) > 0 else ""
-        glass_out = glass_list[1] if len(glass_list) > 1 else ""
-        
+
         is_independent = '통바ㅁ' in w_shape_orig.replace(" ","") or '통바ㄷ' in w_shape_orig.replace(" ","")
         is_supplementary_tongba = not is_independent and ('CB-' in model_name.upper() or '각도바' in model_name)
         if is_supplementary_tongba: continue
-        
+
         w_val_raw = pd.to_numeric(main_row.get('길이(W)'), errors='coerce')
         w_val = int(w_val_raw) if pd.notnull(w_val_raw) else 0
-        
         h_val_raw = pd.to_numeric(main_row.get('높이(H)'), errors='coerce')
         h_val = int(h_val_raw) if pd.notnull(h_val_raw) else 0
-        
+
+        # ★ [버그2 수정] 벤트 치수(W1): 블록 내 2번째 행부터 순회, 비고 제외, 메인W보다 작은 첫 번째 W값
         w1_val = 0
-        if len(group) >= 2:
-            w1_raw = pd.to_numeric(group.iloc[1].get('길이(W)'), errors='coerce')
-            if pd.notnull(w1_raw) and w1_raw > 0:
+        for b_i in range(1, len(block)):
+            loc_check = str(block.iloc[b_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue
+            w1_raw = pd.to_numeric(block.iloc[b_i].get('길이(W)'), errors='coerce')
+            if pd.notnull(w1_raw) and 0 < w1_raw < w_val:
                 w1_val = int(w1_raw)
-        
+                break
+
+        # ★ [버그3 수정] 이중창 유리 사양: 블록 전체 행 순회하며 비고 제외, 최대 2개 수집
+        glass_list = []
+        for b_i in range(len(block)):
+            loc_check = str(block.iloc[b_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue
+            g = clean_glass_val(block.iloc[b_i].get('내부유리종류', ''))
+            if g and g not in glass_list:
+                glass_list.append(g)
+            if len(glass_list) >= 2:
+                break
+        glass_in  = glass_list[0] if len(glass_list) > 0 else ""
+        glass_out = glass_list[1] if len(glass_list) > 1 else ""
+
+        # ★ [버그1 수정] 벤트 방향: 블록 내 비고 제외 행들을 순회하며 좌/우 텍스트 탐색
+        vent_dir = ""
+        for b_i in range(len(block)):
+            loc_check = str(block.iloc[b_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue
+            shape_val = str(block.iloc[b_i].get('창형태', '')).strip()
+            if shape_val and shape_val not in ['nan', '', 'N']:
+                vent_dir = shape_val
+                # 메인행(b_i==0)은 창형태(2W, 3W 등)이므로 좌/우가 명시된 행 우선
+                if '좌' in shape_val or '우' in shape_val or '핸들' in shape_val or '힌지' in shape_val:
+                    break
+
+        # 핸들 높이 (블록 내 100~3000 범위 숫자 탐색)
         handle_height = ""
-        if len(group) >= 3:
-            for val in group.iloc[2].values:
+        for b_i in range(1, len(block)):
+            loc_check = str(block.iloc[b_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue
+            for val in block.iloc[b_i].values:
                 try:
                     num = float(val)
-                    if 100 <= num <= 3000: handle_height = int(num); break
+                    if 100 <= num <= 3000:
+                        handle_height = int(num); break
                 except: pass
+            if handle_height:
+                break
 
-        vent_dir = str(group.iloc[1].get('창형태')).strip() if len(group) >= 2 and pd.notnull(group.iloc[1].get('창형태')) else ""
         has_screen = True if pd.notnull(main_row.get('방충망')) and str(main_row.get('방충망')).strip().upper() not in ['', 'X', 'NONE', '0'] else False
 
         auto_t_top, auto_t_bot, auto_t_left, auto_t_right = [], [], [], []
-        
-        def find_one_matching_bar(target_len, target_loc):
-            for t in all_tongbas:
-                if not t.get('used', False) and t.get('len') == target_len and target_loc and t.get('loc') == target_loc:
-                    t['used'] = True; return f"{t.get('code')}({t.get('len')})"
-            for t in all_tongbas:
-                if not t.get('used', False) and t.get('len') == target_len and not t.get('loc'):
-                    t['used'] = True; return f"{t.get('code')}({t.get('len')})"
-            for t in all_tongbas:
-                if not t.get('used', False) and t.get('len') == target_len:
-                    t['used'] = True; return f"{t.get('code')}({t.get('len')})"
-            return None
 
         if not is_independent:
             m1 = find_one_matching_bar(w_val, loc)
             if m1: auto_t_top.append(m1)
-            
             m2 = find_one_matching_bar(w_val, loc)
-            if m2: auto_t_bot.append(m2) 
-            
+            if m2: auto_t_bot.append(m2)
             m3 = find_one_matching_bar(h_val, loc)
             if m3: auto_t_left.append(m3)
-            
             m4 = find_one_matching_bar(h_val, loc)
-            if m4: auto_t_right.append(m4) 
+            if m4: auto_t_right.append(m4)
 
         windows_for_drawing.append({
-            '순번': seq_num, '위치': loc, '제품명': prod_orig, '모델명': model_name, '형태': w_shape_orig, 
+            '순번': seq_num, '위치': loc, '제품명': prod_orig, '모델명': model_name, '형태': w_shape_orig,
             'glass_in': glass_in, 'glass_out': glass_out,
             '가로(W)': w_val, '세로(H)': h_val, 'w1': w1_val, '핸들높이': handle_height, 'vent_dir': vent_dir, 'has_screen': has_screen,
             'auto_top': ",".join(auto_t_top), 'auto_bot': ",".join(auto_t_bot),
