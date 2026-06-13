@@ -637,7 +637,7 @@ def generate_a3_pdf_and_images(draw_data, p_name, s_addr, scale_bounds):
             fig.patches.extend([patches.Rectangle((0.015, 0.92), 0.97, 0.06, fill=True, color='#F8FAFC', ec='#1E293B', lw=2.5, transform=fig.transFigure, figure=fig)])
             
             author_name = st.session_state.get("user_name", "")
-            fig.text(0.5, 0.95, f"🏢 파트너: {p_name}      |      📍 현장: {s_addr}      |      ✍️ 작성자: {author_name}", ha='center', va='center', fontsize=16, fontweight='bold', color='#0F172A')
+            fig.text(0.5, 0.95, f"파트너: {p_name}      |      현장: {s_addr}      |      작성자: {author_name}", ha='center', va='center', fontsize=16, fontweight='bold', color='#0F172A')
             
             axes_flat = axes.flatten()
             for idx, ax in enumerate(axes_flat):
@@ -735,8 +735,18 @@ if uploaded_file:
             st.markdown("#### 📊 미배정 대기소")
             if unused_tongbas:
                 st.warning("사이즈가 달라 배정되지 못한 통바입니다.")
-                for t in unused_tongbas:
-                    st.code(t)
+                # 미배정 통바마다 체크박스 표시 — 체크 시 배정 완료로 시각적 표시
+                for t_idx, t in enumerate(unused_tongbas):
+                    ck_key = f"unassigned_ck_{t_idx}_{t}"
+                    checked = st.session_state.get(ck_key, False)
+                    col_ck, col_label = st.columns([0.12, 0.88])
+                    with col_ck:
+                        new_val = st.checkbox("", value=checked, key=ck_key)
+                    with col_label:
+                        if new_val:
+                            st.markdown(f"~~{t}~~ ✅ **배정 완료**", unsafe_allow_html=False)
+                        else:
+                            st.code(t)
             else:
                 st.success("모든 통바가 도면에 완벽하게 1차 매칭되었습니다! 🎉")
                 
