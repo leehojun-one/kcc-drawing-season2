@@ -678,29 +678,6 @@ def save_edits(uid):
     st.session_state[f"saved_left_{uid}"] = st.session_state.get(f"in_left_{uid}", "")
     st.session_state[f"saved_right_{uid}"] = st.session_state.get(f"in_right_{uid}", "")
     st.session_state[f"status_{uid}"] = "confirmed"
-    # ★ 저장 시점에 입력된 통바 코드를 파싱해 미배정 저장소와 대조 → 적용완료 처리
-    _sync_unassigned_after_save(uid)
-
-def _sync_unassigned_after_save(uid):
-    """저장된 상/하/좌/우 통바 코드를 파싱해, 미배정 저장소의 통바 중 코드가 일치하는 항목을 적용완료로 표시."""
-    # 현재 저장된 4면 통바 문자열 수집
-    applied_codes = []
-    for side in ["top", "bot", "left", "right"]:
-        t_str = st.session_state.get(f"saved_{side}_{uid}", "")
-        for item in parse_tongba_input(t_str, 0):
-            # 코드 형식: "CB-101*100(2390)" — 이름(len) 추출
-            code_key = f"{item['name']}({item['len']})"
-            for _ in range(item['qty']):
-                applied_codes.append(code_key)
-    # 미배정 저장소 키 목록 가져오기 (unassigned_list_에서 저장)
-    unassigned_list = st.session_state.get("unassigned_list", [])
-    # 미배정 통바 각각에 대해 applied_codes와 대조
-    used_applied = list(applied_codes)  # 소비 추적용 복사본
-    for t_idx, t in enumerate(unassigned_list):
-        t_clean = t.strip()
-        if t_clean in used_applied:
-            st.session_state[f"unassigned_done_{t_idx}"] = True
-            used_applied.remove(t_clean)
 
 st.title(f"🪟 KCC홈씨씨 창호도면 자동화 시스템 (사용자: {st.session_state.get('user_name', '')})")
 
@@ -720,8 +697,7 @@ if uploaded_file:
         st.session_state["last_file_id"] = uploaded_file.file_id
         
     draw_data, tongba_bom, unused_tongbas, overall_scale_bounds, ext_partner, ext_address = parse_any_quotation(uploaded_file)
-    # 미배정 저장소 목록을 session_state에 보관 (save_edits의 _sync 함수가 참조)
-    st.session_state["unassigned_list"] = unused_tongbas
+
     
     tab1, tab2 = st.tabs(["💻 1단계: 도면 작업대", "🖨️ 2단계: 출력 및 카톡 전송 센터"])
     
@@ -758,42 +734,58 @@ if uploaded_file:
             
             st.divider()
             st.markdown("#### 📊 미배정 대기소")
-            if unused_tongbas:
-                # 적용완료 수 계산
-                done_count = sum(1 for t_idx in range(len(unused_tongbas)) if st.session_state.get(f"unassigned_done_{t_idx}", False))
-                remaining = len(unused_tongbas) - done_count
 
-                if remaining == 0:
-                    st.success(f"✅ 미배정 통바 {len(unused_tongbas)}개 전부 수동 배정 완료!")
+            # ★ 핵심: 현재 도면에 실제 적용된 통바 코드 목록을 실시간 집계 (코드별 잔여 풀)
+            # 발주BOM 전체를 "쓸 수 있는 풀"로 두고, 도면 적용분을 차감 → 남은 게 미배정
+            from collections import Counter
+            bom_pool = Counter()
+            for item in tongba_bom:
+                code_key = f"{item['자재명']}({item['길이']})"
+                bom_pool[code_key] += item['수량']
+
+            applied_pool = Counter()
+            for uid2 in range(len(draw_data)):
+                for side in ["top", "bot", "left", "right"]:
+                    t_str2 = st.session_state.get(f"saved_{side}_{uid2}", draw_data[uid2].get(f"auto_{side}", ""))
+                    for itm in parse_tongba_input(t_str2, 0):
+                        ak = f"{itm['name']}({itm['len']})"
+                        applied_pool[ak] += itm['qty']
+
+            # 미배정 저장소 각 통바의 실시간 배정 여부 판단
+            # unused_tongbas는 파싱 시 자동매칭에서 탈락한 목록
+            # 각 통바 코드가 현재 도면에 몇 개 적용됐는지 비교해 완료 여부 결정
+            unassigned_status = []  # (code, is_done)
+            temp_applied = Counter(applied_pool)  # 소비 추적용
+            for t in unused_tongbas:
+                t_clean = t.strip()
+                if temp_applied.get(t_clean, 0) > 0:
+                    unassigned_status.append((t_clean, True))
+                    temp_applied[t_clean] -= 1
                 else:
-                    st.warning(f"수동 배정 대기 중: {remaining}개 / 전체 {len(unused_tongbas)}개")
+                    unassigned_status.append((t_clean, False))
 
-                for t_idx, t in enumerate(unused_tongbas):
-                    is_done = st.session_state.get(f"unassigned_done_{t_idx}", False)
-                    col_ck, col_label = st.columns([0.12, 0.88])
-                    with col_ck:
-                        # 체크박스: 자동(저장 연동) + 수동 모두 가능
-                        ck_key = f"unassigned_done_{t_idx}"
-                        st.checkbox("", value=is_done, key=ck_key)
-                    with col_label:
-                        if is_done:
-                            st.markdown(f"~~{t}~~ ✅ **배정 완료**")
-                        else:
-                            st.code(t)
+            done_count = sum(1 for _, done in unassigned_status if done)
+            remaining = len(unassigned_status) - done_count
 
-                # 초과 배정 경고: 도면에 적용된 수량이 발주 수량 초과 시
-                if tongba_bom:
-                    total_applied = 0
-                    for uid2 in range(len(draw_data)):
-                        for side in ["top", "bot", "left", "right"]:
-                            t_str2 = st.session_state.get(f"saved_{side}_{uid2}", draw_data[uid2].get(f"auto_{side}", ""))
-                            for itm in parse_tongba_input(t_str2, 0):
-                                total_applied += itm["qty"]
-                    total_bom = sum(item["수량"] for item in tongba_bom)
-                    if total_applied > total_bom:
-                        st.error(f"🚨 초과 배정! 발주 {total_bom}개 < 도면 적용 {total_applied}개\n발주 수량을 초과하여 설계되었습니다.")
-            else:
+            if not unused_tongbas:
                 st.success("모든 통바가 도면에 완벽하게 1차 매칭되었습니다! 🎉")
+            elif remaining == 0:
+                st.success(f"✅ 미배정 통바 {len(unused_tongbas)}개 전부 배정 완료!")
+            else:
+                st.warning(f"배정 대기: {remaining}개 / 전체 {len(unused_tongbas)}개")
+
+            for t_code, is_done in unassigned_status:
+                if is_done:
+                    st.markdown(f"✅ ~~{t_code}~~ **배정 완료**")
+                else:
+                    st.code(t_code)
+
+            # 초과 배정 경고
+            if tongba_bom:
+                total_bom = sum(item["수량"] for item in tongba_bom)
+                total_applied_qty = sum(applied_pool.values())
+                if total_applied_qty > total_bom:
+                    st.error(f"🚨 초과 배정!\n발주 {total_bom}개 < 도면 적용 {total_applied_qty}개\n발주 수량을 초과하여 설계되었습니다.")
                 
         with col_main:
             st.subheader("🤖 프리미엄 카탈로그 뷰: 통바 편집 및 확인")
