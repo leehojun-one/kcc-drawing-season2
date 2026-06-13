@@ -253,17 +253,18 @@ def parse_any_quotation(file_buffer):
                 return ""
             return val_str
                 
-        # 팀장님 설명대로 이중창은 1번째 행(내부)과 2번째 행(외부)의 셀 텍스트를 정확히 낚아챕니다.
+        # [버그3 수정] 이중창 유리 사양: 전체 행을 순회하며 최대 2개 수집 (비고 행만 제외)
         glass_list = []
-        if len(group) >= 1:
-            g1 = clean_glass_val(group.iloc[0].get('내부유리종류', ''))
-            if g1: glass_list.append(g1)
-        if len(group) >= 2:
-            loc_val2 = str(group.iloc[1].get('설치위치', '')).strip()
-            if '비고' not in loc_val2:  # 비고 행 오염 방지
-                g2 = clean_glass_val(group.iloc[1].get('내부유리종류', ''))
-                if g2: glass_list.append(g2)
-        
+        for row_i in range(len(group)):
+            loc_check = str(group.iloc[row_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue  # 비고 행은 스킵
+            g = clean_glass_val(group.iloc[row_i].get('내부유리종류', ''))
+            if g and g not in glass_list:
+                glass_list.append(g)
+            if len(glass_list) >= 2:
+                break
+
         glass_in = glass_list[0] if len(glass_list) > 0 else ""
         glass_out = glass_list[1] if len(glass_list) > 1 else ""
         
@@ -277,11 +278,16 @@ def parse_any_quotation(file_buffer):
         h_val_raw = pd.to_numeric(main_row.get('높이(H)'), errors='coerce')
         h_val = int(h_val_raw) if pd.notnull(h_val_raw) else 0
         
+        # [버그2 수정] 벤트 치수: 전체 행 순회하며 메인 W보다 작은 첫 번째 W값을 벤트 폭으로 인식
         w1_val = 0
-        if len(group) >= 2:
-            w1_raw = pd.to_numeric(group.iloc[1].get('길이(W)'), errors='coerce')
-            if pd.notnull(w1_raw) and w1_raw > 0:
+        for row_i in range(1, len(group)):
+            loc_check = str(group.iloc[row_i].get('설치위치', '')).strip()
+            if '비고' in loc_check:
+                continue
+            w1_raw = pd.to_numeric(group.iloc[row_i].get('길이(W)'), errors='coerce')
+            if pd.notnull(w1_raw) and 0 < w1_raw < w_val:
                 w1_val = int(w1_raw)
+                break
         
         handle_height = ""
         if len(group) >= 3:
@@ -291,7 +297,19 @@ def parse_any_quotation(file_buffer):
                     if 100 <= num <= 3000: handle_height = int(num); break
                 except: pass
 
-        vent_dir = str(group.iloc[1].get('창형태')).strip() if len(group) >= 2 and pd.notnull(group.iloc[1].get('창형태')) else ""
+        # [버그1 수정] 벤트 방향: 메인 행 창형태에 좌/우가 있으면 우선 사용, 없으면 2번째 행 확인
+        def extract_vent_dir(grp):
+            main_shape = str(grp.iloc[0].get('창형태', '')).strip()
+            if '좌' in main_shape or '우' in main_shape:
+                return main_shape
+            if len(grp) >= 2:
+                val2 = grp.iloc[1].get('창형태', '')
+                if pd.notnull(val2):
+                    val2_str = str(val2).strip()
+                    if val2_str and val2_str not in ['nan', '']:
+                        return val2_str
+            return ""
+        vent_dir = extract_vent_dir(group)
         has_screen = True if pd.notnull(main_row.get('방충망')) and str(main_row.get('방충망')).strip().upper() not in ['', 'X', 'NONE', '0'] else False
 
         auto_t_top, auto_t_bot, auto_t_left, auto_t_right = [], [], [], []
