@@ -735,57 +735,54 @@ if uploaded_file:
             st.divider()
             st.markdown("#### 📊 미배정 대기소")
 
-            # ★ 핵심: 현재 도면에 실제 적용된 통바 코드 목록을 실시간 집계 (코드별 잔여 풀)
-            # 발주BOM 전체를 "쓸 수 있는 풀"로 두고, 도면 적용분을 차감 → 남은 게 미배정
-            from collections import Counter
-            bom_pool = Counter()
-            for item in tongba_bom:
-                code_key = f"{item['자재명']}({item['길이']})"
-                bom_pool[code_key] += item['수량']
-
-            applied_pool = Counter()
-            for uid2 in range(len(draw_data)):
-                for side in ["top", "bot", "left", "right"]:
-                    t_str2 = st.session_state.get(f"saved_{side}_{uid2}", draw_data[uid2].get(f"auto_{side}", ""))
-                    for itm in parse_tongba_input(t_str2, 0):
-                        ak = f"{itm['name']}({itm['len']})"
-                        applied_pool[ak] += itm['qty']
-
-            # 미배정 저장소 각 통바의 실시간 배정 여부 판단
-            # unused_tongbas는 파싱 시 자동매칭에서 탈락한 목록
-            # 각 통바 코드가 현재 도면에 몇 개 적용됐는지 비교해 완료 여부 결정
-            unassigned_status = []  # (code, is_done)
-            temp_applied = Counter(applied_pool)  # 소비 추적용
-            for t in unused_tongbas:
-                t_clean = t.strip()
-                if temp_applied.get(t_clean, 0) > 0:
-                    unassigned_status.append((t_clean, True))
-                    temp_applied[t_clean] -= 1
-                else:
-                    unassigned_status.append((t_clean, False))
-
-            done_count = sum(1 for _, done in unassigned_status if done)
-            remaining = len(unassigned_status) - done_count
-
-            if not unused_tongbas:
-                st.success("모든 통바가 도면에 완벽하게 1차 매칭되었습니다! 🎉")
-            elif remaining == 0:
-                st.success(f"✅ 미배정 통바 {len(unused_tongbas)}개 전부 배정 완료!")
-            else:
-                st.warning(f"배정 대기: {remaining}개 / 전체 {len(unused_tongbas)}개")
-
-            for t_code, is_done in unassigned_status:
-                if is_done:
-                    st.markdown(f"✅ ~~{t_code}~~ **배정 완료**")
-                else:
-                    st.code(t_code)
-
-            # 초과 배정 경고
             if tongba_bom:
-                total_bom = sum(item["수량"] for item in tongba_bom)
-                total_applied_qty = sum(applied_pool.values())
-                if total_applied_qty > total_bom:
-                    st.error(f"🚨 초과 배정!\n발주 {total_bom}개 < 도면 적용 {total_applied_qty}개\n발주 수량을 초과하여 설계되었습니다.")
+                from collections import Counter
+
+                # ★ 발주BOM 전체를 코드별로 풀(pool)로 구성
+                bom_pool = Counter()
+                for item in tongba_bom:
+                    code_key = f"{item['자재명']}({item['길이']})"
+                    bom_pool[code_key] += item['수량']
+
+                # ★ 현재 도면에 적용된 통바 코드별 수량 집계
+                applied_pool = Counter()
+                for uid2 in range(len(draw_data)):
+                    for side in ["top", "bot", "left", "right"]:
+                        t_str2 = st.session_state.get(f"saved_{side}_{uid2}", draw_data[uid2].get(f"auto_{side}", ""))
+                        for itm in parse_tongba_input(t_str2, 0):
+                            ak = f"{itm['name']}({itm['len']})"
+                            applied_pool[ak] += itm['qty']
+
+                # ★ 미배정 목록 = 발주BOM - 도면적용 → 미배정 항목 리스트 생성
+                # 발주에 있는 코드 중 도면 적용이 부족한 만큼을 미배정으로 표시
+                unassigned_display = []  # (code, is_done)
+                for code, bom_qty in sorted(bom_pool.items()):
+                    applied_qty = applied_pool.get(code, 0)
+                    # 적용된 수량만큼은 "배정완료", 부족분만큼은 "미배정"
+                    done_qty = min(applied_qty, bom_qty)
+                    missing_qty = bom_qty - done_qty
+                    for _ in range(done_qty):
+                        unassigned_display.append((code, True))
+                    for _ in range(missing_qty):
+                        unassigned_display.append((code, False))
+
+                total_missing = sum(1 for _, done in unassigned_display if not done)
+                total_over = sum(max(0, applied_pool.get(c, 0) - q) for c, q in bom_pool.items())
+
+                if total_missing == 0 and total_over == 0:
+                    st.success("✅ 발주 통바 전체 배정 완료!")
+                elif total_missing > 0:
+                    st.warning(f"⚠️ 미배정 {total_missing}개 남음")
+                if total_over > 0:
+                    st.error(f"🚨 초과 배정 {total_over}개! 발주 수량 초과 설계")
+
+                for code, is_done in unassigned_display:
+                    if is_done:
+                        st.markdown(f"✅ ~~{code}~~ **배정 완료**")
+                    else:
+                        st.code(code)
+            else:
+                st.info("통바 내역 없음")
                 
         with col_main:
             st.subheader("🤖 프리미엄 카탈로그 뷰: 통바 편집 및 확인")
